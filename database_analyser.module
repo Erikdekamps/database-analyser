@@ -121,25 +121,19 @@ function _database_analyser_get_page($form, &$form_state) {
       '#type' => 'submit',
       '#value' => t('Replace in @table', array('@table' => $entry['table_name'])),
       '#submit' => array('_database_analyser_replace_entries_submit'),
-      '#attributes' => array(
-        'class' => array(
-          'table-' . $entry['table_name'],
-          'column-' . $entry['column'],
-        ),
-      ),
     );
 
-    // Add the table name.
-    $form['output'][$entry['table_name']]['table_name'] = array(
-      '#type' => 'hidden',
-      '#value' => $entry['table_name'],
+    // Add the table class.
+    $form['output'][$entry['table_name']]['replace']['#attributes']['table'] = array(
+      $entry['table_name'],
     );
 
-    // Add the table name.
-    $form['output'][$entry['table_name']]['column_name'] = array(
-      '#type' => 'hidden',
-      '#value' => $entry['column'],
-    );
+    // Add the column classes.
+    if (!empty($entry['columns'])) {
+      foreach ($entry['columns'] as $col) {
+        $form['output'][$entry['table_name']]['replace']['#attributes']['columns'][] = $col;
+      }
+    }
   }
 
   // Return the form.
@@ -176,10 +170,12 @@ function _database_analyser_create_entries_table($search_string) {
     // Loop through the tables.
     foreach ($entries as $table_name => $fields) {
 
-      $rows = array();
+      $columns = $rows = array();
 
       // Loop through the fields.
       foreach ($fields as $field => $values) {
+
+        $columns[] = $field;
 
         // Loop through the values.
         foreach ($values as $i => $value) {
@@ -204,7 +200,7 @@ function _database_analyser_create_entries_table($search_string) {
       $tables[] = array(
         'table_name' => $table_name,
         'count' => count($rows),
-        'column' => $field,
+        'columns' => $columns,
         'table' => $table,
       );
     }
@@ -383,13 +379,12 @@ function _database_analyser_replace_entries_submit($form, &$form_state) {
   // Get the search and replace values.
   $search = $form_state['input']['search'];
   $replace = $form_state['input']['replace'];
+  $table = $triggering_element['#attributes']['table'][0];
 
-  // Get the table and column values from the class array.
-  $table = str_replace('table-', '', $triggering_element['#attributes']['class'][0]);
-  $column = str_replace('column-', '', $triggering_element['#attributes']['class'][1]);
-
-  // Trigger replacing.
-  _database_analyser_replace_data($table, $column, $search, $replace);
+  // Trigger for all columns.
+  foreach ($triggering_element['#attributes']['columns'] as $column) {
+    _database_analyser_replace_data($table, $column, $search, $replace);
+  }
 }
 
 /**
@@ -406,7 +401,7 @@ function _database_analyser_replace_entries_submit($form, &$form_state) {
  */
 function _database_analyser_replace_data($table, $column, $search, $replace) {
 
-  //
+  // Log the operation.
   watchdog('database_analyser', 'Updating table @table column @column from @search to @replace', array(
     '@table' => $table,
     '@column' => $column,
@@ -423,7 +418,6 @@ function _database_analyser_replace_data($table, $column, $search, $replace) {
         ':new' => $replace,
       ))
       ->execute();
-
   }
   catch (PDOException $e) {
     watchdog('database_analyser', 'PDOException: @e', array('@e' => $e->getMessage()));
