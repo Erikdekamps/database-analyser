@@ -1,0 +1,3 @@
+name = Database analyser
+description = Analyse database tables for insecure links.
+core = 7.x

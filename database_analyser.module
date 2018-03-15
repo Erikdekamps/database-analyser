@@ -1,0 +1,248 @@
+<?php
+
+/**
+ * @file
+ * Main module file.
+ */
+
+define('DATABASE_ANALYSER_SEARCH_QUERY', 'http://');
+
+/**
+ * Implements hook_menu().
+ */
+function database_analyser_menu() {
+  return array(
+    'admin/config/development/database-analyser' => array(
+      'title' => 'Database analyser',
+      'description' => 'Analyse all database tables for a search query.',
+      'access arguments' => array('access database analyser'),
+      'page callback' => '_database_analyser_get_page',
+    ),
+  );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function database_analyser_permission() {
+  return array(
+    'access database analyser' => array(
+      'title' => t('Access database analyser'),
+      'description' => t('Access the database analyser inspection page.'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Get the page.
+ */
+function _database_analyser_get_page() {
+
+  $output = '';
+
+  // Get the table.
+  $tables = _database_analyser_create_entries_table();
+
+  // Add the output. Todo: Fieldset.
+  if (!empty($tables)) {
+    foreach ($tables as $table) {
+      $output .= $table;
+    }
+  }
+
+  // Return the rendered table.
+  return $output;
+}
+
+/**
+ * Create the entries table.
+ */
+function _database_analyser_create_entries_table() {
+
+  // Get the entries.
+  $entries = _database_analyser_get_entries();
+
+  // Initialize the table and header.
+  $tables = array();
+  $header = array(
+    t('Table'),
+    t('Field'),
+    t('Value'),
+  );
+
+  // Check the entries.
+  if (!empty($entries)) {
+
+    // Loop through the tables.
+    foreach ($entries as $table => $fields) {
+
+      // Initialize the rows.
+      $rows = array();
+
+      // Loop through the fields.
+      foreach ($fields as $field => $values) {
+        foreach ($values as $i => $value) {
+          $rows[] = array(
+            $table, $field, _database_analyser_highlight_value($value),
+          );
+        }
+      }
+
+      // Create the table.
+      $table = theme('table', array(
+        'header' => $header,
+        'rows' => $rows,
+        'empty' => t('Your table is empty'),
+        'sticky' => TRUE,
+        'attributes' => array(
+          'width' => '100%',
+        ),
+      ));
+
+      $tables[] = $table;
+    }
+  }
+
+  // Return the output.
+  return $tables;
+}
+
+/**
+ * Get the entries.
+ *
+ * @return array
+ *   Returns the entries as array.
+ */
+function _database_analyser_get_entries() {
+
+  $rows = array();
+
+  // Get the tables.
+  $tables = _database_analyser_get_tables();
+
+  // Loop through the tables.
+  foreach ($tables as $table => $fields) {
+
+    // Check if the table is excluded.
+    $table_excluded = _database_analyser_table_is_excluded($table);
+    if (!$table_excluded) {
+
+      // Loop through the fields.
+      foreach ($fields as $field) {
+
+        // Create the field entry.
+        $entry = _database_analyser_get_table_field_entries($table, $field);
+
+        // Check the field entry.
+        if (!empty($entry)) {
+
+          // Add the field value.
+          $rows[$table][$field] = $entry;
+        }
+      }
+    }
+  }
+
+  // Return the database rows.
+  return $rows;
+}
+
+/**
+ * Get the tables in the database.
+ */
+function _database_analyser_get_tables() {
+
+  // Initialize the array.
+  $tables = array();
+
+  // Get the schema.
+  $schemas = drupal_get_schema();
+
+  // Loop through the schemas and store the fields.
+  foreach ($schemas as $table => $schema) {
+    if (db_table_exists($table)) {
+      foreach ($schema['fields'] as $field => $values) {
+        if (db_field_exists($table, $field)) {
+          $tables[$table][$field] = $field;
+        }
+      }
+    }
+  }
+
+  // Return the array.
+  return $tables;
+}
+
+/**
+ * Get the entries within a table.
+ *
+ * @param string $table
+ *   The database table name.
+ * @param string $field
+ *   The database table field name.
+ *
+ * @return array
+ *   Returns a result if found.
+ */
+function _database_analyser_get_table_field_entries($table, $field) {
+
+  // Query the table.
+  $query = db_select($table, 't')
+    ->fields('t', array($field))
+    ->condition("t.$field", '%' . db_like(DATABASE_ANALYSER_SEARCH_QUERY) . '%', 'LIKE');
+
+  // Fetch the col.
+  return $query->execute()->fetchCol();
+}
+
+/**
+ * Add highlighting in bold to a value.
+ *
+ * @param string $value
+ *   The value to highlight in.
+ *
+ * @return mixed
+ *   Returns a string.
+ */
+function _database_analyser_highlight_value($value) {
+
+  // Generate a text version.
+  $value = check_plain($value);
+
+  // Set the highlighting.
+  $replace = '<strong style="color: red;">' . DATABASE_ANALYSER_SEARCH_QUERY . '</strong>';
+
+  // Replace the search query to surround it with strong tags.
+  return str_replace(DATABASE_ANALYSER_SEARCH_QUERY, $replace, $value);
+}
+
+/**
+ * Check if a table is excluded.
+ *
+ * @param string $table
+ *   The table to check.
+ *
+ * @return bool
+ *   Returns TRUE if excluded.
+ */
+function _database_analyser_table_is_excluded($table) {
+
+  // Excluded tables.
+  $excluded = array(
+    'cache_',
+    'watchdog',
+  );
+
+  // Loop through the excluded tables.
+  foreach ($excluded as $e) {
+
+    // Match the current table.
+    if (stristr($table, $e) !== FALSE) {
+      return TRUE;
+    }
+  }
+
+  // Return false by default.
+  return FALSE;
+}
