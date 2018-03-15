@@ -5,7 +5,8 @@
  * Main module file.
  */
 
-define('DATABASE_ANALYSER_SEARCH_QUERY', 'http://');
+define('DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY', 'http://');
+define('DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY', 'https://');
 
 /**
  * Implements hook_menu().
@@ -16,7 +17,8 @@ function database_analyser_menu() {
       'title' => 'Database analyser',
       'description' => 'Analyse all database tables for a search query.',
       'access arguments' => array('access database analyser'),
-      'page callback' => '_database_analyser_get_page',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('_database_analyser_get_page'),
     ),
   );
 }
@@ -37,24 +39,133 @@ function database_analyser_permission() {
 /**
  * Get the page.
  */
-function _database_analyser_get_page() {
+function _database_analyser_get_page($form, &$form_state) {
 
-  // Return the rendered table.
-  return _database_analyser_create_entries_table();
+  // Add the js.
+  drupal_add_js('misc/form.js');
+  drupal_add_js('misc/collapse.js');
+
+  // Initialize the search string.
+  $search_string = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
+  $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
+
+  // Update based on the form state.
+  if (!empty($form_state['input']['search'])) {
+    $search_string = $form_state['input']['search'];
+  }
+  if (!empty($form_state['input']['replace'])) {
+    $replace_string = $form_state['input']['replace'];
+  }
+
+  // Input fieldset.
+  $form['input'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['input']['search'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Search string'),
+    '#default_value' => $search_string,
+  );
+
+  $form['input']['replace'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Replace string'),
+    '#default_value' => $replace_string,
+  );
+
+  // Add the search submit button.
+  $form['input']['find'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+    '#submit' => array('_database_analyser_submit_search'),
+  );
+
+  // Output fieldset.
+  $form['output'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Output'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  // Get the entries.
+  $entries = _database_analyser_create_entries_table($search_string);
+
+  foreach ($entries as $entry) {
+
+    // Add the fieldset.
+    $form['output'][$entry['table_name']] = array(
+      '#type' => 'fieldset',
+      '#title' => $entry['table_name'],
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+
+    // Add the amount.
+    $form['output'][$entry['table_name']]['count'] = array(
+      '#type' => 'markup',
+      '#markup' => t('@count entries found', array('@count' => $entry['count'])),
+    );
+
+    // Add the table.
+    $form['output'][$entry['table_name']]['table'] = array(
+      '#type' => 'markup',
+      '#markup' => $entry['table'],
+    );
+
+    $form['output'][$entry['table_name']]['replace'] = array(
+      '#type' => 'submit',
+      '#value' => t('Replace in @table', array('@table' => $entry['table_name'])),
+      '#submit' => array('_database_analyser_replace_entries_submit'),
+      '#attributes' => array(
+        'class' => array(
+          'table-' . $entry['table_name'],
+          'column-' . $entry['column'],
+        ),
+      ),
+    );
+
+    // Add the table name.
+    $form['output'][$entry['table_name']]['table_name'] = array(
+      '#type' => 'hidden',
+      '#value' => $entry['table_name'],
+    );
+
+    // Add the table name.
+    $form['output'][$entry['table_name']]['column_name'] = array(
+      '#type' => 'hidden',
+      '#value' => $entry['column'],
+    );
+  }
+
+  // Return the form.
+  return $form;
 }
 
 /**
  * Create the entries table.
+ *
+ * @param string $search_string
+ *   The search string.
+ *
+ * @return array
+ *   Returns an array.
+ *
+ * @throws \Exception
  */
-function _database_analyser_create_entries_table() {
+function _database_analyser_create_entries_table($search_string) {
 
   // Get the entries.
-  $entries = _database_analyser_get_entries();
+  $entries = _database_analyser_get_entries($search_string);
 
   // Initialize the table and header.
-  $rows = array();
+  $tables = array();
+
   $header = array(
-    t('Table'),
     t('Column'),
     t('Value'),
   );
@@ -63,7 +174,9 @@ function _database_analyser_create_entries_table() {
   if (!empty($entries)) {
 
     // Loop through the tables.
-    foreach ($entries as $table => $fields) {
+    foreach ($entries as $table_name => $fields) {
+
+      $rows = array();
 
       // Loop through the fields.
       foreach ($fields as $field => $values) {
@@ -71,23 +184,31 @@ function _database_analyser_create_entries_table() {
         // Loop through the values.
         foreach ($values as $i => $value) {
           $rows[] = array(
-            $table, $field, _database_analyser_highlight_value($value),
+            $field,
+            _database_analyser_highlight_value($value, $search_string),
           );
         }
       }
+
+      // Create the table.
+      $table = theme('table', array(
+        'header' => $header,
+        'rows' => $rows,
+        'empty' => t('Your table is empty'),
+        'sticky' => TRUE,
+        'attributes' => array(
+          'width' => '100%',
+        ),
+      ));
+
+      $tables[] = array(
+        'table_name' => $table_name,
+        'count' => count($rows),
+        'column' => $field,
+        'table' => $table,
+      );
     }
   }
-
-  // Create the table.
-  $tables = theme('table', array(
-    'header' => $header,
-    'rows' => $rows,
-    'empty' => t('Your table is empty'),
-    'sticky' => TRUE,
-    'attributes' => array(
-      'width' => '100%',
-    ),
-  ));
 
   // Return the output.
   return $tables;
@@ -96,10 +217,13 @@ function _database_analyser_create_entries_table() {
 /**
  * Get the entries.
  *
+ * @param string $search_string
+ *   The search string.
+ *
  * @return array
  *   Returns the entries as array.
  */
-function _database_analyser_get_entries() {
+function _database_analyser_get_entries($search_string) {
 
   $rows = array();
 
@@ -118,7 +242,7 @@ function _database_analyser_get_entries() {
       foreach ($fields as $field) {
 
         // Create the field entry.
-        $entry = _database_analyser_get_table_field_entries($table, $field);
+        $entry = _database_analyser_get_table_field_entries($table, $field, $search_string);
 
         // Check the field entry.
         if (!empty($entry)) {
@@ -167,16 +291,18 @@ function _database_analyser_get_tables() {
  *   The database table name.
  * @param string $field
  *   The database table field name.
+ * @param string $search_string
+ *   The search string.
  *
  * @return array
  *   Returns a result if found.
  */
-function _database_analyser_get_table_field_entries($table, $field) {
+function _database_analyser_get_table_field_entries($table, $field, $search_string) {
 
   // Query the table.
   $query = db_select($table, 't')
     ->fields('t', array($field))
-    ->condition("t.$field", '%' . db_like(DATABASE_ANALYSER_SEARCH_QUERY) . '%', 'LIKE');
+    ->condition("t.$field", '%' . db_like($search_string) . '%', 'LIKE');
 
   // Fetch the col.
   return $query->execute()->fetchCol();
@@ -187,20 +313,22 @@ function _database_analyser_get_table_field_entries($table, $field) {
  *
  * @param string $value
  *   The value to highlight in.
+ * @param string $search_string
+ *   The search string.
  *
  * @return mixed
  *   Returns a string.
  */
-function _database_analyser_highlight_value($value) {
+function _database_analyser_highlight_value($value, $search_string) {
 
   // Generate a text version.
   $value = check_plain($value);
 
   // Set the highlighting.
-  $replace = '<strong style="color: red;">' . DATABASE_ANALYSER_SEARCH_QUERY . '</strong>';
+  $replace = '<strong style="color: red;">' . $search_string . '</strong>';
 
   // Replace the search query to surround it with strong tags.
-  return str_replace(DATABASE_ANALYSER_SEARCH_QUERY, $replace, $value);
+  return str_replace($search_string, $replace, $value);
 }
 
 /**
@@ -232,4 +360,49 @@ function _database_analyser_table_is_excluded($table) {
 
   // Return false by default.
   return FALSE;
+}
+
+/**
+ * Form submit handler.
+ */
+function _database_analyser_submit_search($form, &$form_state) {
+
+  // Update the default value.
+  $form_state['complete_form']['input']['search']['#value'] = $form_state['input']['search'];
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Form submit handler.
+ */
+function _database_analyser_replace_entries_submit($form, &$form_state) {
+
+  // Get the triggering element.
+  $triggering_element = $form_state['triggering_element'];
+
+  // Get the table from the element.
+  //$table = str_replace('Replace in ', '', $triggering_element);
+
+  $search = $form_state['input']['search'];
+  $replace = $form_state['input']['replace'];
+
+  $table = str_replace('table-', '', $triggering_element['#attributes']['class'][0]);
+  $column = str_replace('column-', '', $triggering_element['#attributes']['class'][1]);
+
+  k($search, $replace, $table, $column);
+  die;
+
+  // Trigger replacing.
+}
+
+/**
+ * Replace data in the database.
+ *
+ * @param $table
+ * @param $field
+ * @param $search
+ * @param $replace
+ */
+function _database_analyser_replace_data($table, $field, $search, $replace) {
+
 }
