@@ -39,20 +39,8 @@ function database_analyser_permission() {
  */
 function _database_analyser_get_page() {
 
-  $output = '';
-
-  // Get the table.
-  $tables = _database_analyser_create_entries_table();
-
-  // Add the output. Todo: Fieldset.
-  if (!empty($tables)) {
-    foreach ($tables as $table) {
-      $output .= $table;
-    }
-  }
-
   // Return the rendered table.
-  return $output;
+  return _database_analyser_create_entries_table();
 }
 
 /**
@@ -64,10 +52,10 @@ function _database_analyser_create_entries_table() {
   $entries = _database_analyser_get_entries();
 
   // Initialize the table and header.
-  $tables = array();
+  $rows = array();
   $header = array(
     t('Table'),
-    t('Field'),
+    t('Column'),
     t('Value'),
   );
 
@@ -77,32 +65,29 @@ function _database_analyser_create_entries_table() {
     // Loop through the tables.
     foreach ($entries as $table => $fields) {
 
-      // Initialize the rows.
-      $rows = array();
-
       // Loop through the fields.
       foreach ($fields as $field => $values) {
+
+        // Loop through the values.
         foreach ($values as $i => $value) {
           $rows[] = array(
             $table, $field, _database_analyser_highlight_value($value),
           );
         }
       }
-
-      // Create the table.
-      $table = theme('table', array(
-        'header' => $header,
-        'rows' => $rows,
-        'empty' => t('Your table is empty'),
-        'sticky' => TRUE,
-        'attributes' => array(
-          'width' => '100%',
-        ),
-      ));
-
-      $tables[] = $table;
     }
   }
+
+  // Create the table.
+  $tables = theme('table', array(
+    'header' => $header,
+    'rows' => $rows,
+    'empty' => t('Your table is empty'),
+    'sticky' => TRUE,
+    'attributes' => array(
+      'width' => '100%',
+    ),
+  ));
 
   // Return the output.
   return $tables;
@@ -126,6 +111,7 @@ function _database_analyser_get_entries() {
 
     // Check if the table is excluded.
     $table_excluded = _database_analyser_table_is_excluded($table);
+
     if (!$table_excluded) {
 
       // Loop through the fields.
@@ -230,7 +216,8 @@ function _database_analyser_table_is_excluded($table) {
 
   // Excluded tables.
   $excluded = array(
-    'cache_',
+    'cache',
+    'webform_submitted_data',
     'watchdog',
   );
 
