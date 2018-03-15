@@ -20,6 +20,13 @@ function database_analyser_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('_database_analyser_get_page'),
     ),
+    'admin/config/development/database-analyser/%' => array(
+      'title' => 'Database analyser',
+      'description' => 'Analyse all database tables for a search query.',
+      'access arguments' => array('access database analyser'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('_database_analyser_get_page', 4),
+    ),
   );
 }
 
@@ -39,7 +46,7 @@ function database_analyser_permission() {
 /**
  * Get the page.
  */
-function _database_analyser_get_page($form, &$form_state) {
+function _database_analyser_get_page($form, &$form_state, $table) {
 
   // Add the js.
   drupal_add_js('misc/form.js');
@@ -84,6 +91,9 @@ function _database_analyser_get_page($form, &$form_state) {
     '#submit' => array('_database_analyser_submit_search'),
   );
 
+  // Get the entries.
+  $entries = _database_analyser_create_entries_table($search_string, $table);
+
   // Output fieldset.
   $form['output'] = array(
     '#type' => 'fieldset',
@@ -92,48 +102,55 @@ function _database_analyser_get_page($form, &$form_state) {
     '#collapsed' => FALSE,
   );
 
-  // Get the entries.
-  $entries = _database_analyser_create_entries_table($search_string);
+  // Check for entries.
+  if (!empty($entries)) {
 
-  foreach ($entries as $entry) {
+    foreach ($entries as $entry) {
 
-    // Add the fieldset.
-    $form['output'][$entry['table_name']] = array(
-      '#type' => 'fieldset',
-      '#title' => $entry['table_name'],
-      '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
-    );
+      // Add the fieldset.
+      $form['output'][$entry['table_name']] = array(
+        '#type' => 'fieldset',
+        '#title' => $entry['table_name'] . ' ' . '(' . $entry['count'] . ')',
+        '#collapsible' => TRUE,
+        '#collapsed' => !empty($table) ? FALSE : TRUE,
+      );
 
-    // Add the amount.
-    $form['output'][$entry['table_name']]['count'] = array(
-      '#type' => 'markup',
-      '#markup' => t('@count entries found', array('@count' => $entry['count'])),
-    );
+      // Add the button
+      $form['output'][$entry['table_name']]['replace'] = array(
+        '#type' => 'submit',
+        '#value' => t('Replace all @count entries in @table', array(
+          '@count' => $entry['count'],
+          '@table' => $entry['table_name'],
+        )),
+        '#submit' => array('_database_analyser_replace_entries_submit'),
+      );
 
-    // Add the table.
-    $form['output'][$entry['table_name']]['table'] = array(
-      '#type' => 'markup',
-      '#markup' => $entry['table'],
-    );
+      // Add the table.
+      $form['output'][$entry['table_name']]['table'] = array(
+        '#type' => 'markup',
+        '#markup' => $entry['table'],
+      );
 
-    $form['output'][$entry['table_name']]['replace'] = array(
-      '#type' => 'submit',
-      '#value' => t('Replace in @table', array('@table' => $entry['table_name'])),
-      '#submit' => array('_database_analyser_replace_entries_submit'),
-    );
+      // Add the table class.
+      $form['output'][$entry['table_name']]['replace']['#attributes']['table'] = array(
+        $entry['table_name'],
+      );
 
-    // Add the table class.
-    $form['output'][$entry['table_name']]['replace']['#attributes']['table'] = array(
-      $entry['table_name'],
-    );
-
-    // Add the column classes.
-    if (!empty($entry['columns'])) {
-      foreach ($entry['columns'] as $col) {
-        $form['output'][$entry['table_name']]['replace']['#attributes']['columns'][] = $col;
+      // Add the column classes.
+      if (!empty($entry['columns'])) {
+        foreach ($entry['columns'] as $col) {
+          $form['output'][$entry['table_name']]['replace']['#attributes']['columns'][] = $col;
+        }
       }
     }
+  }
+  else {
+
+    // Add the fieldset.
+    $form['output']['empty'] = array(
+      '#type' => 'markup',
+      '#markup' => t('No data found.'),
+    );
   }
 
   // Return the form.
@@ -151,10 +168,10 @@ function _database_analyser_get_page($form, &$form_state) {
  *
  * @throws \Exception
  */
-function _database_analyser_create_entries_table($search_string) {
+function _database_analyser_create_entries_table($search_string, $table = '') {
 
   // Get the entries.
-  $entries = _database_analyser_get_entries($search_string);
+  $entries = _database_analyser_get_entries($search_string, $table);
 
   // Initialize the table and header.
   $tables = array();
@@ -219,12 +236,12 @@ function _database_analyser_create_entries_table($search_string) {
  * @return array
  *   Returns the entries as array.
  */
-function _database_analyser_get_entries($search_string) {
+function _database_analyser_get_entries($search_string, $table = '') {
 
   $rows = array();
 
   // Get the tables.
-  $tables = _database_analyser_get_tables();
+  $tables = _database_analyser_get_tables($table);
 
   // Loop through the tables.
   foreach ($tables as $table => $fields) {
@@ -257,13 +274,18 @@ function _database_analyser_get_entries($search_string) {
 /**
  * Get the tables in the database.
  */
-function _database_analyser_get_tables() {
+function _database_analyser_get_tables($table = '') {
 
   // Initialize the array.
   $tables = array();
 
   // Get the schema.
   $schemas = drupal_get_schema();
+
+  // Check for a single table and use that one.
+  if (!empty($table)) {
+    $schemas = array($table => $schemas[$table]);
+  }
 
   // Loop through the schemas and store the fields.
   foreach ($schemas as $table => $schema) {
