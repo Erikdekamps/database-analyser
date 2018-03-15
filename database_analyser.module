@@ -380,29 +380,52 @@ function _database_analyser_replace_entries_submit($form, &$form_state) {
   // Get the triggering element.
   $triggering_element = $form_state['triggering_element'];
 
-  // Get the table from the element.
-  //$table = str_replace('Replace in ', '', $triggering_element);
-
+  // Get the search and replace values.
   $search = $form_state['input']['search'];
   $replace = $form_state['input']['replace'];
 
+  // Get the table and column values from the class array.
   $table = str_replace('table-', '', $triggering_element['#attributes']['class'][0]);
   $column = str_replace('column-', '', $triggering_element['#attributes']['class'][1]);
 
-  k($search, $replace, $table, $column);
-  die;
-
   // Trigger replacing.
+  _database_analyser_replace_data($table, $column, $search, $replace);
 }
 
 /**
  * Replace data in the database.
  *
- * @param $table
- * @param $field
- * @param $search
- * @param $replace
+ * @param string $table
+ *   The table name string
+ * @param string $column
+ *   The column name string
+ * @param string $search
+ *   The search query string
+ * @param string $replace
+ *   The replace query string
  */
-function _database_analyser_replace_data($table, $field, $search, $replace) {
+function _database_analyser_replace_data($table, $column, $search, $replace) {
 
+  //
+  watchdog('database_analyser', 'Updating table @table column @column from @search to @replace', array(
+    '@table' => $table,
+    '@column' => $column,
+    '@search' => $search,
+    '@replace' => $replace,
+  ));
+
+  try {
+
+    // Run the update query.
+    db_update($table)
+      ->expression($column, "replace($column, :old, :new)", array(
+        ':old' => $search,
+        ':new' => $replace,
+      ))
+      ->execute();
+
+  }
+  catch (PDOException $e) {
+    watchdog('database_analyser', 'PDOException: @e', array('@e' => $e->getMessage()));
+  }
 }
