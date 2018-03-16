@@ -27,6 +27,20 @@ function database_analyser_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('_database_analyser_get_page', 4),
     ),
+    'admin/config/development/database-analyser/%/%' => array(
+      'title' => 'Database analyser',
+      'description' => 'Analyse all database tables for a search query.',
+      'access arguments' => array('access database analyser'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('_database_analyser_get_page', 4, 5),
+    ),
+    'admin/config/development/database-analyser/%/%/%' => array(
+      'title' => 'Database analyser',
+      'description' => 'Analyse all database tables for a search query.',
+      'access arguments' => array('access database analyser'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('_database_analyser_get_page', 4, 5, 6),
+    ),
   );
 }
 
@@ -45,8 +59,22 @@ function database_analyser_permission() {
 
 /**
  * Get the page.
+ *
+ * @param array $form
+ *   The form array.
+ * @param $form_state
+ *   The form state array.
+ * @param string $table
+ *   The database table.
+ * @param string $search
+ *   The search string.
+ * @param string $replace
+ *   The replace string.
+ *
+ * @return mixed
+ * @throws \Exception
  */
-function _database_analyser_get_page($form, &$form_state, $table) {
+function _database_analyser_get_page($form, &$form_state, $table, $search, $replace) {
 
   // Add the js.
   drupal_add_js('misc/form.js');
@@ -55,6 +83,16 @@ function _database_analyser_get_page($form, &$form_state, $table) {
   // Initialize the search string.
   $search_string = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
   $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
+
+  // Check for a provided search string in the url.
+  if (!empty($search)) {
+    $search_string = $search;
+  }
+
+  // Check for a provided replace string in the url.
+  if (!empty($replace)) {
+    $replace_string = $replace;
+  }
 
   // Update based on the form state.
   if (!empty($form_state['input']['search'])) {
