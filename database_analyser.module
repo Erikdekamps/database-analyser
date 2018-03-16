@@ -5,8 +5,8 @@
  * Main module file.
  */
 
-define('DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY', 'http://');
-define('DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY', 'https://');
+define("DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY", 'http://');
+define("DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY", 'https://');
 
 /**
  * Implements hook_menu().
@@ -88,7 +88,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
   drupal_add_js('misc/collapse.js');
 
   // Get the parameters.
-  $parameters = _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace);
+  $parameters = _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace, $table);
 
   // Input fieldset.
   $form['input'] = array(
@@ -118,7 +118,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
   );
 
   // Get the entries.
-  $entries = _database_analyser_create_entries_table($form, $parameters['search'], $table);
+  $entries = _database_analyser_create_entries_table($parameters['search'], $parameters['table']);
 
   // Output fieldset.
   $form['output'] = array(
@@ -138,7 +138,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
         '#type' => 'fieldset',
         '#title' => $entry['table_name'] . ' ' . '(' . $entry['count'] . ')',
         '#collapsible' => TRUE,
-        '#collapsed' => !empty($table) ? FALSE : TRUE,
+        '#collapsed' => !empty($parameters['table']) ? FALSE : TRUE,
       );
 
       // Add the button
@@ -196,7 +196,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
  *
  * @throws \Exception
  */
-function _database_analyser_create_entries_table(&$form, $search_string, $table = '') {
+function _database_analyser_create_entries_table($search_string, $table = '') {
 
   // Get the entries.
   $entries = _database_analyser_get_entries($search_string, $table);
@@ -260,6 +260,8 @@ function _database_analyser_create_entries_table(&$form, $search_string, $table 
  *
  * @param string $search_string
  *   The search string.
+ * @param string $table
+ *   The database table.
  *
  * @return array
  *   Returns the entries as array.
@@ -301,6 +303,11 @@ function _database_analyser_get_entries($search_string, $table = '') {
 
 /**
  * Get the tables in the database.
+ *
+ * @param string $table
+ *   The table.
+ *
+ * @return array
  */
 function _database_analyser_get_tables($table = '') {
 
@@ -410,6 +417,11 @@ function _database_analyser_table_is_excluded($table) {
 
 /**
  * Form submit handler.
+ *
+ * @param array $form
+ *   The form array.
+ * @param array $form_state
+ *   The form state array.
  */
 function _database_analyser_submit_search($form, &$form_state) {
 
@@ -420,6 +432,11 @@ function _database_analyser_submit_search($form, &$form_state) {
 
 /**
  * Form submit handler.
+ *
+ * @param array $form
+ *   The form array.
+ * @param array $form_state
+ *   The form state array.
  */
 function _database_analyser_replace_entries_submit($form, &$form_state) {
 
@@ -483,11 +500,13 @@ function _database_analyser_replace_data($table, $column, $search, $replace) {
  *   The search string.
  * @param string $replace
  *   The replace string.
+ * @param string $table
+ *   The table.
  *
  * @return array
  *   Returns an array with parameters.
  */
-function _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace) {
+function _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace, $table) {
 
   // Initialize the replace string.
   $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
@@ -510,6 +529,7 @@ function _database_analyser_get_search_and_replace_parameters($form_state, $sear
   if ($current_path === $path) {
     $search_string = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
     $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
+    $table = '';
   }
   // Search or search and replace.
   else {
@@ -521,11 +541,13 @@ function _database_analyser_get_search_and_replace_parameters($form_state, $sear
     if ($count === 1) {
       $search_string = $matches[1][0];
       $replace_string = '';
+      $table = '';
     }
     // Search and replace found.
     elseif ($count === 2) {
       $search_string = $matches[1][0];
       $replace_string = $matches[1][1];
+      $table = '';
     }
   }
 
@@ -541,5 +563,6 @@ function _database_analyser_get_search_and_replace_parameters($form_state, $sear
   return array(
     'search' => $search_string,
     'replace' => $replace_string,
+    'table' => $table,
   );
 }
