@@ -358,7 +358,7 @@ function _database_analyser_get_table_field_entries($table, $field, $search_stri
     ->condition("t.$field", '%' . db_like($search_string) . '%', 'LIKE');
 
   // Fetch the col.
-  return $query->execute()->fetchCol();
+  return $query->execute()->fetchCol(0);
 }
 
 /**
