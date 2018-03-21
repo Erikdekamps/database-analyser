@@ -63,12 +63,12 @@ function _database_analyser_get_page($form, &$form_state) {
 
   // Check for the search.
   if (isset($query_parameters['search'])) {
-    $search = $query_parameters['search'];
+    $search = trim($query_parameters['search']);
   }
 
   // Check for the replace.
   if (isset($query_parameters['replace'])) {
-    $replace = $query_parameters['replace'];
+    $replace = trim($query_parameters['replace']);
   }
 
   // Input fieldset.
