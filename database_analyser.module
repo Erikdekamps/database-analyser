@@ -123,7 +123,7 @@ function _database_analyser_get_page($form, &$form_state) {
         '#type' => 'fieldset',
         '#title' => $entry['table_name'] . ' ' . '(' . $entry['count'] . ')',
         '#collapsible' => TRUE,
-        '#collapsed' => FALSE,
+        '#collapsed' => TRUE,
       );
 
       // Add the button
@@ -163,6 +163,29 @@ function _database_analyser_get_page($form, &$form_state) {
       '#markup' => t('No data found.'),
     );
   }
+
+  // Input fieldset.
+  $form['drastic'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Drastic measures'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+
+  // Add the replace all submit button.
+  $form['drastic']['info'] = array(
+    '#type' => 'markup',
+    '#markup' => t('Replace the data in all database tables.'),
+    '#prefix' => '<div>',
+    '#suffix' => '</div>',
+  );
+
+  // Add the replace all submit button.
+  $form['drastic']['replace_all'] = array(
+    '#type' => 'submit',
+    '#value' => t('Replace all'),
+    '#submit' => array('_database_analyser_submit_replace_all'),
+  );
 
   // Return the form.
   return $form;
@@ -427,6 +450,42 @@ function _database_analyser_submit_search($form, &$form_state) {
 }
 
 /**
+ * Replace the search in all tables.
+ */
+function _database_analyser_submit_replace_all($form, &$form_state) {
+
+  // Get the search and replace parameters.
+  $search = !empty($form_state['input']['search']) ? $form_state['input']['search'] : '';
+  $replace = !empty($form_state['input']['replace']) ? $form_state['input']['replace'] : '';
+
+  $groups = $form_state['groups'];
+
+  // Loop through the form state groups.
+  foreach ($groups as $key => $value) {
+
+    // Exclude fieldsets to get an array of tables.
+    if (!in_array($key, array('input', 'output', 'drastic'))) {
+
+      // Get the entries.
+      $entries = _database_analyser_get_entries($search, $key);
+
+      // Check the entries.
+      if (!empty($entries)) {
+        foreach ($entries as $table_name => $column_name) {
+          _database_analyser_replace_data($table_name, key($column_name), $search, $replace);
+        }
+      }
+    }
+  }
+
+  // Inform the user.
+  drupal_set_message(t('All data has been replaced from %from to %to.', array(
+    '%from' => $search,
+    '%to' => $replace,
+  )));
+}
+
+/**
  * Form submit handler.
  *
  * @param array $form
@@ -463,19 +522,13 @@ function _database_analyser_replace_entries_submit($form, &$form_state) {
       'query' => $query,
     ),
   );
-}
 
-/**
- * Form submit redirect function.
- *
- * @param string $search
- *   The search string.
- * @param string $replace
- *   The replace string.
- */
-function _database_analyser_get_form_redirect_url($search, $replace) {
-
-  // Todo: check if needed.
+  // Inform the user.
+  drupal_set_message(t('All data in table %table has been replaced from %from to %to.', array(
+    '%table' => $table,
+    '%from' => $search,
+    '%to' => $replace,
+  )));
 }
 
 /**
