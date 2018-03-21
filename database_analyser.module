@@ -21,33 +21,6 @@ function database_analyser_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('_database_analyser_get_page'),
     ),
-    // The page with search parameter.
-    'admin/config/development/database-analyser/%' => array(
-      'title' => 'Database analyser',
-      'description' => 'Analyse all database tables for a search query.',
-      'access arguments' => array('access database analyser'),
-      'page callback' => 'drupal_get_form',
-      'page arguments' => array('_database_analyser_get_page', 4),
-      'load arguments' => array(4),
-    ),
-    // The page with search and replace parameter.
-    'admin/config/development/database-analyser/%/%' => array(
-      'title' => 'Database analyser',
-      'description' => 'Analyse all database tables for a search query.',
-      'access arguments' => array('access database analyser'),
-      'page callback' => 'drupal_get_form',
-      'page arguments' => array('_database_analyser_get_page', 4, 5),
-      'load arguments' => array(4, 5),
-    ),
-    // The page with search and replace parameter and table parameter.
-    'admin/config/development/database-analyser/%/%/%' => array(
-      'title' => 'Database analyser',
-      'description' => 'Analyse all database tables for a search query.',
-      'access arguments' => array('access database analyser'),
-      'page callback' => 'drupal_get_form',
-      'page arguments' => array('_database_analyser_get_page', 4, 5, 6),
-      'load arguments' => array(4, 5, 6),
-    ),
   );
 }
 
@@ -71,24 +44,32 @@ function database_analyser_permission() {
  *   The form array.
  * @param $form_state
  *   The form state array.
- * @param string $search
- *   The search string.
- * @param string $replace
- *   The replace string.
- * @param string $table
- *   The database table.
  *
  * @return mixed
  * @throws \Exception
  */
-function _database_analyser_get_page($form, &$form_state, $search, $replace, $table) {
+function _database_analyser_get_page($form, &$form_state) {
 
   // Add the js.
   drupal_add_js('misc/form.js');
   drupal_add_js('misc/collapse.js');
 
-  // Get the parameters.
-  $parameters = _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace, $table);
+  // Initialize the default search and replace strings.
+  $search = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
+  $replace = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
+
+  // Get the query parameters.
+  $query_parameters = drupal_get_query_parameters();
+
+  // Check for the search.
+  if (isset($query_parameters['search'])) {
+    $search = $query_parameters['search'];
+  }
+
+  // Check for the replace.
+  if (isset($query_parameters['replace'])) {
+    $replace = $query_parameters['replace'];
+  }
 
   // Input fieldset.
   $form['input'] = array(
@@ -101,13 +82,13 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
   $form['input']['search'] = array(
     '#type' => 'textfield',
     '#title' => t('Search string'),
-    '#default_value' => $parameters['search'],
+    '#default_value' => $search,
   );
 
   $form['input']['replace'] = array(
     '#type' => 'textfield',
     '#title' => t('Replace string'),
-    '#default_value' => $parameters['replace'],
+    '#default_value' => $replace,
   );
 
   // Add the search submit button.
@@ -117,8 +98,11 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
     '#submit' => array('_database_analyser_submit_search'),
   );
 
+  // Check for a table parameter.
+  $table = !empty($query_parameters['table']) ? $query_parameters['table'] : '';
+
   // Get the entries.
-  $entries = _database_analyser_create_entries_table($parameters['search'], $parameters['table']);
+  $entries = _database_analyser_create_entries_table($search, $table);
 
   // Output fieldset.
   $form['output'] = array(
@@ -131,6 +115,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
   // Check for entries.
   if (!empty($entries)) {
 
+    // Loop through the entries.
     foreach ($entries as $entry) {
 
       // Add the fieldset.
@@ -138,7 +123,7 @@ function _database_analyser_get_page($form, &$form_state, $search, $replace, $ta
         '#type' => 'fieldset',
         '#title' => $entry['table_name'] . ' ' . '(' . $entry['count'] . ')',
         '#collapsible' => TRUE,
-        '#collapsed' => !empty($parameters['table']) ? FALSE : TRUE,
+        '#collapsed' => FALSE,
       );
 
       // Add the button
@@ -425,9 +410,20 @@ function _database_analyser_table_is_excluded($table) {
  */
 function _database_analyser_submit_search($form, &$form_state) {
 
-  // Update the default value.
-  $form_state['complete_form']['input']['search']['#value'] = $form_state['input']['search'];
-  $form_state['rebuild'] = TRUE;
+  // Build the query.
+  $query = array();
+
+  // Get the search and replace parameters.
+  $query['search'] = !empty($form_state['input']['search']) ? $form_state['input']['search'] : '';
+  $query['replace'] = !empty($form_state['input']['replace']) ? $form_state['input']['replace'] : '';
+
+  // Redirect.
+  $form_state['redirect'] = array(
+    'admin/config/development/database-analyser',
+    array(
+      'query' => $query,
+    ),
+  );
 }
 
 /**
@@ -452,6 +448,34 @@ function _database_analyser_replace_entries_submit($form, &$form_state) {
   foreach ($triggering_element['#attributes']['columns'] as $column) {
     _database_analyser_replace_data($table, $column, $search, $replace);
   }
+
+  // Build the query.
+  $query = array();
+
+  // Get the search and replace parameters.
+  $query['search'] = !empty($search) ? $search : '';
+  $query['replace'] = !empty($replace) ? $replace : '';
+
+  // Redirect.
+  $form_state['redirect'] = array(
+    'admin/config/development/database-analyser',
+    array(
+      'query' => $query,
+    ),
+  );
+}
+
+/**
+ * Form submit redirect function.
+ *
+ * @param string $search
+ *   The search string.
+ * @param string $replace
+ *   The replace string.
+ */
+function _database_analyser_get_form_redirect_url($search, $replace) {
+
+  // Todo: check if needed.
 }
 
 /**
@@ -489,80 +513,4 @@ function _database_analyser_replace_data($table, $column, $search, $replace) {
   catch (PDOException $e) {
     watchdog('database_analyser', 'PDOException: @e', array('@e' => $e->getMessage()));
   }
-}
-
-/**
- * Get the url parameters.
- *
- * @param array $form_state
- *   The form state array.
- * @param string $search
- *   The search string.
- * @param string $replace
- *   The replace string.
- * @param string $table
- *   The table.
- *
- * @return array
- *   Returns an array with parameters.
- */
-function _database_analyser_get_search_and_replace_parameters($form_state, $search, $replace, $table) {
-
-  // Initialize the replace string.
-  $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
-  $search_string = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
-
-  if (!empty($search)) {
-    $search_string = $search;
-  }
-
-  if (!empty($replace)) {
-    $replace_string = $replace;
-  }
-
-  // Match within curly braces.
-  $path = 'admin/config/development/database-analyser';
-  $current_path = str_replace($path . '/', '', current_path());
-  preg_match_all('/{(.*?)}/', $current_path, $matches);
-
-  // No search and no replace.
-  if ($current_path === $path) {
-    $search_string = DATABASE_ANALYSER_DEFAULT_SEARCH_QUERY;
-    $replace_string = DATABASE_ANALYSER_DEFAULT_REPLACE_QUERY;
-    $table = '';
-  }
-  // Search or search and replace.
-  else {
-
-    // Get the count.
-    $count = count($matches[0]);
-
-    // Search found.
-    if ($count === 1) {
-      $search_string = $matches[1][0];
-      $replace_string = '';
-      $table = '';
-    }
-    // Search and replace found.
-    elseif ($count === 2) {
-      $search_string = $matches[1][0];
-      $replace_string = $matches[1][1];
-      $table = '';
-    }
-  }
-
-  // Search and replace based on form state.
-  if (!empty($form_state['input']['search'])) {
-    $search_string = $form_state['input']['search'];
-  }
-  if (!empty($form_state['input']['replace'])) {
-    $replace_string = $form_state['input']['replace'];
-  }
-
-  // Return the array.
-  return array(
-    'search' => $search_string,
-    'replace' => $replace_string,
-    'table' => $table,
-  );
 }
